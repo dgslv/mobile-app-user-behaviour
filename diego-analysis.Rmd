@@ -1,0 +1,136 @@
+---
+title: "Worldwide Mobile App User Behavior Dataset"
+author: "Diego"
+date: "2/22/2022"
+output: html_notebook
+---
+
+```{r setup, include=FALSE, echo = FALSE, results='hide', echo = FALSE, collapse = TRUE}
+knitr::opts_chunk$set(echo = FALSE, cache = TRUE, collapse = TRUE)
+library(readr)
+library(tidyverse)
+library(stringr)
+```
+
+## Contexto
+
+...
+
+## Análise
+
+### Leitura do conjunto de dados
+
+```{r}
+df <- readxl::read_excel('./mobile_app_user_dataset_1.xlsx')[-1,]
+```
+
+### Exploração
+
+> Uma vez que é uma pesquisa sobre *mobile devices*, veremos qual a proporção de pessoas que de fato possuem um *device*.
+
+```{r}
+df %>% 
+  select(Q2) %>% 
+  drop_na() %>% 
+  mutate(
+    Q2 = case_when(
+      Q2 == 1 ~ "Possui",
+      Q2 != 1 ~ "Não Possui"
+    )
+  ) %>% 
+  ggplot(
+    aes(
+      y = Q2,
+      fill = Q2
+    )
+  ) +
+  geom_bar(
+    position = "dodge",
+  ) +
+  geom_label(
+      stat = 'count',
+      aes(
+        label = ..count..,
+      ),
+      color = 'white',
+      show.legend = FALSE
+  ) + 
+  labs(
+    y = "",
+    x = "Total de Pessoas",
+    title = "Distribuição de pessoas que tem ou não celular",
+    subtitle = "Dados oriundos da pesquisa realizada pela Harvard"
+  ) +
+  scale_fill_manual(
+    values = c( "#C4161C", "#009491"),
+  ) +
+  theme_classic() +
+  theme(
+    axis.title.x = element_text(vjust=-.2, size=11),
+    legend.title = element_blank()
+  ) 
+```
+<br />
+<br />
+
+> Podemos visualizar que a grande parte das pessoas possuem celular.
+
+<br />
+
+> A proporção de pessoas que não tem é de `r scales::percent(round(1208/10200, 2))`.
+
+<br />
+
+> Visualizaremos agora os diferentes tipos de dispositivos utilizados pelos usuários que possuem celular 
+> 
+
+
+```{r}
+
+anonynum_fn <- function () 
+phone_format <- function (phone_list, phone_type, apply_function = function (param) { param }) {
+  phone_dic = list(
+    apple = c("apple", "iphone", "ipad", "aple", "appale", "ipod", "aplle", "i-phone", "ipone", "applke", "applr", "appme", "iphon"),
+    blackberry = c("blackberry", "blackb", "blackeb", "baclkberry", "blakckberry", "blacberry", "blakberry", "blackerry", "bleckberry", ""),
+    samsung = c("samsung", "samsumg", "sansung", "sumsung", "samsug", "samsun",  "samgung", "samsing", "samung", "sansug", "samasung", "samsang", "samsong", "sumsang", "galaxynote", ""),
+    null = c("\\?", "9000", "930p"),
+    sony_ericsson = c("sony-", "sonyer", "sony", "erison"),
+    nokia = c("nokia", "nokya"),
+    asus = c("asus"),
+    acer = c("acer"),
+  ) 
+  
+  str_detect(phone_list, paste(phone_dic[[phone_type]], collapse = "|")) ~ apply_function(phone_type)
+}
+
+df %>%
+  filter(Q2 == 1) %>% 
+  select(Q3_1_TEXT) %>% 
+  mutate(
+    Q3 = str_replace(str_to_lower(Q3_1_TEXT), " ", "")
+  ) %>% 
+  mutate(
+    Q3 = case_when(
+      phone_format(Q3, "apple"),
+      phone_format(Q3, "samsung"),
+      phone_format(Q3, "blackberry"),
+      phone_format(Q3, "null"),
+      phone_format(Q3, "nokia"),
+      phone_format(Q3, "sony_ericsson", function(param) {
+        str_replace(param, "_", " ")
+      }),
+      TRUE ~ Q3
+    )
+  ) %>% 
+  group_by(Q3) %>% 
+  count() %>% 
+  arrange(desc(n))
+  
+  
+```
+
+```{r}
+
+phones$Q3
+```
+
