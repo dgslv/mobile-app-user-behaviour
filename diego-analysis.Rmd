@@ -1,0 +1,38 @@
+---
+title: "Worldwide Mobile App User Behavior Dataset"
+author: "Diego"
+date: "2/22/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(tidyverse)
+```
+
+## Contexto
+
+...
+
+## Análise
+
+Leitura do conjunto de dados
+
+```{r cars}
+df <- readxl::read_excel('./mobile_app_user_dataset_1.xlsx')[-1,]
+```
+
+```{r}
+df
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
