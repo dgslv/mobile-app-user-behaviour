@@ -5,8 +5,8 @@ date: "2/22/2022"
 output: html_notebook
 ---
 
-```{r setup, include=FALSE, echo = FALSE, results='hide', echo = FALSE, collapse = TRUE}
-knitr::opts_chunk$set(echo = FALSE, cache = TRUE, collapse = TRUE)
+```{r setup, include=FALSE, echo = FALSE, echo = FALSE}
+knitr::opts_chunk$set(cache = TRUE, collapse = TRUE)
 library(readr)
 library(tidyverse)
 library(stringr)
@@ -29,6 +29,7 @@ df <- readxl::read_excel('./mobile_app_user_dataset_1.xlsx')[-1,]
 > Uma vez que é uma pesquisa sobre *mobile devices*, veremos qual a proporção de pessoas que de fato possuem um *device*.
 
 ```{r}
+
 df %>% 
   select(Q2) %>% 
   drop_na() %>% 
@@ -69,6 +70,7 @@ df %>%
     axis.title.x = element_text(vjust=-.2, size=11),
     legend.title = element_blank()
   ) 
+
 ```
 <br />
 <br />
@@ -87,18 +89,18 @@ df %>%
 
 ```{r}
 
-anonynum_fn <- function () 
-phone_format <- function (phone_list, phone_type, apply_function = function (param) { param }) {
+phone_format <- function (phone_list, phone_type, apply_function = function(param) param) {
   phone_dic = list(
     apple = c("apple", "iphone", "ipad", "aple", "appale", "ipod", "aplle", "i-phone", "ipone", "applke", "applr", "appme", "iphon"),
-    blackberry = c("blackberry", "blackb", "blackeb", "baclkberry", "blakckberry", "blacberry", "blakberry", "blackerry", "bleckberry", ""),
-    samsung = c("samsung", "samsumg", "sansung", "sumsung", "samsug", "samsun",  "samgung", "samsing", "samung", "sansug", "samasung", "samsang", "samsong", "sumsang", "galaxynote", ""),
+    blackberry = c("blackberry", "blackb", "blackeb", "baclkberry", "blakckberry", "blacberry", "blakberry", "blackerry", "bleckberry"),
+    samsung = c("samsung", "samsumg", "sansung", "sumsung", "samsug", "samsun",  "samgung", "samsing", "samung", "sansug", "samasung", "samsang", "samsong", "sumsang", "galaxynote"),
     null = c("\\?", "9000", "930p"),
     sony_ericsson = c("sony-", "sonyer", "sony", "erison"),
     nokia = c("nokia", "nokya"),
     asus = c("asus"),
-    acer = c("acer"),
+    acer = c("acer")
   ) 
+  
   
   str_detect(phone_list, paste(phone_dic[[phone_type]], collapse = "|")) ~ apply_function(phone_type)
 }
@@ -106,6 +108,7 @@ phone_format <- function (phone_list, phone_type, apply_function = function (par
 df %>%
   filter(Q2 == 1) %>% 
   select(Q3_1_TEXT) %>% 
+  drop_na() %>% 
   mutate(
     Q3 = str_replace(str_to_lower(Q3_1_TEXT), " ", "")
   ) %>% 
@@ -115,22 +118,13 @@ df %>%
       phone_format(Q3, "samsung"),
       phone_format(Q3, "blackberry"),
       phone_format(Q3, "null"),
-      phone_format(Q3, "nokia"),
-      phone_format(Q3, "sony_ericsson", function(param) {
-        str_replace(param, "_", " ")
-      }),
+      phone_format(Q3, "sony_ericsson", function(param) str_replace(param, "_", " ")),
       TRUE ~ Q3
     )
   ) %>% 
   group_by(Q3) %>% 
   count() %>% 
   arrange(desc(n))
-  
-  
 ```
 
-```{r}
-
-phones$Q3
-```
 
