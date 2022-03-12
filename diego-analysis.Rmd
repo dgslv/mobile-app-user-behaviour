@@ -479,3 +479,16 @@ df %>%
   )
 ```
 
+
+```{r}
+q9_cols <- names(df)[(64:(63+12))]
+
+df %>% 
+  arrange_and_plot(
+    q9_cols,
+    q9_cols,
+    invert.axis = TRUE
+  )
+
+```
+
