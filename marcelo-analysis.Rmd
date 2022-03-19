@@ -479,9 +479,20 @@ df %>%
   )
 ```
 
-# Segmentação de Darden
+# Modelo CLuster não Hierarquico
+
+Passos: 
+
+- Histogramas das principais variáveis do modelo
+
+- Selecionar as variáveis que serão usadas para o modelo, explicar o motivo:
+    1. Variável que varia mto pouco
+    2. Variável pouco correlacionada
+    3. Como estou usando distância euclidiana, cuidado com escalas
+
+- Preparar base para rodar os modelos: Tirar NAs
 
 ```{r}
-
+skimr::skim(df)
 ```
 
