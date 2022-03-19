@@ -1,0 +1,481 @@
+---
+title: "Worldwide Mobile App User Behavior Dataset"
+author: "Diego"
+date: "2/22/2022"
+output: html_notebook
+---
+
+```{r setup, include=FALSE, echo = FALSE, echo = FALSE}
+knitr::opts_chunk$set(cache = TRUE, collapse = TRUE)
+library(readr)
+library(tidyverse)
+library(tidytext)
+library(stringr)
+
+```
+
+## Contexto
+
+Teste
+
+## Análise
+
+### Leitura do conjunto de dados
+
+```{r}
+df <- readxl::read_excel('./mobile_app_user_dataset_1.xlsx')[-1,]
+```
+
+### Exploração
+
+> Uma vez que é uma pesquisa sobre *mobile devices*, veremos qual a proporção de pessoas que de fato possuem um *device*.
+
+```{r}
+
+df %>% 
+  select(Q2) %>% 
+  drop_na() %>% 
+  mutate(
+    Q2 = case_when(
+      Q2 == 1 ~ "Possui",
+      Q2 != 1 ~ "Não Possui"
+    )
+  ) %>% 
+  ggplot(
+    aes(
+      y = Q2,
+      fill = Q2
+    )
+  ) +
+  geom_bar(
+    position = "dodge",
+  ) +
+  geom_label(
+      stat = 'count',
+      aes(
+        label = ..count..,
+      ),
+      color = 'white',
+      show.legend = FALSE
+  ) + 
+  labs(
+    y = "",
+    x = "Total de Pessoas",
+    title = "Distribuição de pessoas que tem ou não celular",
+    subtitle = "Dados oriundos da pesquisa realizada pela Harvard"
+  ) +
+  scale_fill_manual(
+    values = c( "#C4161C", "#009491"),
+  ) +
+  theme_classic() +
+  theme(
+    axis.title.x = element_text(vjust=-.2, size=11),
+    legend.title = element_blank()
+  ) 
+
+```
+<br />
+<br />
+
+> Podemos visualizar que a grande parte das pessoas possuem celular.
+
+<br />
+
+> A proporção de pessoas que não tem é de `r scales::percent(round(1208/10200, 2))`.
+
+<br />
+
+> Visualizaremos agora os diferentes tipos de dispositivos utilizados pelos usuários que possuem celular 
+> 
+
+
+```{r}
+
+phone_format <- function (phone_list, phone_type, apply_function = function(param) param) {
+  phone_dic = list(
+    apple = c("apple", "iphone", "ipad", "aple", "appale", "ipod", "aplle", "i-phone", "ipone", "applke", "applr", "appme", "iphon"),
+    blackberry = c("blackberry", "blackb", "blackeb", "baclkberry", "blakckberry", "blacberry", "blakberry", "blackerry", "bleckberry"),
+    samsung = c("samsung", "samsumg", "sansung", "sumsung", "samsug", "samsun",  "samgung", "samsing", "samung", "sansug", "samasung", "samsang", "samsong", "sumsang", "galaxynote"),
+    null = c("\\?", "9000", "930p"),
+    sony_ericsson = c("sony-", "sonyer", "sony", "erison"),
+    nokia = c("nokia", "nokya"),
+    asus = c("asus"),
+    acer = c("acer")
+  ) 
+  
+  
+  str_detect(phone_list, paste(phone_dic[[phone_type]], collapse = "|")) ~ apply_function(phone_type)
+}
+
+phones <- df %>%
+  filter(Q2 == 1) %>% 
+  select(Q3_1_TEXT) %>% 
+  drop_na() %>% 
+  mutate(
+    Q3 = str_replace(str_to_lower(Q3_1_TEXT), " ", "")
+  ) %>% 
+  mutate(
+    Q3 = case_when(
+      phone_format(Q3, "apple"),
+      phone_format(Q3, "samsung"),
+      phone_format(Q3, "blackberry"),
+      phone_format(Q3, "null"),
+      phone_format(Q3, "sony_ericsson", function(param) str_replace(param, "_", " ")),
+      TRUE ~ Q3
+    )
+  ) %>% 
+  group_by(Q3) %>% 
+  count() %>%
+  arrange(desc(n)) 
+
+phones
+```
+
+```{r}
+length(names(df))
+```
+
+```{r}
+df
+```
+
+
+
+```{r}
+
+q5_answers <- data.frame(
+  row.names = c(1, 2, 3, 4, 5, 6, 7, 8, 9),
+  val = c("Never", "Less than once a month ", "Once a month", "More than once a month", "Once a week", "More than once a week", "Once a day", "Several times a day", "Other")
+)
+
+df %>% 
+  select(Q5) %>% 
+  drop_na() %>% 
+  mutate(
+    Q5_TEXT = qr_answers[Q5, ]
+  ) %>% 
+  group_by(Q5_TEXT) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% 
+  ggplot(
+    aes(
+      x = reorder(Q5_TEXT, -n),
+      y = n,
+      fill = Q5_TEXT
+    )
+  ) +
+  geom_col() +
+  labs(
+    x = 'Frequencia de abertura da loja de aplicativos',
+    y = 'Total'
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust=.6),
+  )
+  
+```
+
+
+```{r}
+
+q6_answers <- data.frame(
+  row.names = c(1, 2, 3, 4, 5, 6),
+  val = c("0 - 1", "2 - 5", "6 - 10", "11 - 20", "21 - 30", "Mais de 30")
+)
+
+
+df %>% 
+  select(Q6) %>% 
+  drop_na() %>% 
+  mutate(
+    Q6_TEXT = q6_answers[Q6,]
+  ) %>% 
+  group_by(Q6_TEXT) %>% 
+  count() %>% 
+  ggplot(
+    aes(
+      x = reorder(Q6_TEXT, -n),
+      y = n,
+      fill = Q6_TEXT
+    )
+  ) +
+  geom_col() +
+  labs(
+    x = 'Quantidade de aplicativos baixados por mês',
+    y = 'Total',
+  ) +
+  theme_classic() +
+  labs(
+    fill = 'Frequência'
+  ) +
+  theme(
+    axis.text.x = element_text(vjust = -1),
+    axis.title.x = element_text(vjust = -1),
+  )
+
+```
+
+Vamos ver se a galera que mais baixa é a galera que mais acessa a loja
+
+```{r, fig.height = 10}
+
+df %>% 
+  select(Q5, Q6) %>% 
+  drop_na() %>% 
+  mutate(
+    Q5 = q5_answers[Q5,],
+    Q6 = q6_answers[Q6, ]
+  ) %>% 
+  group_by(Q5, Q6) %>% 
+    count() %>% 
+  arrange(desc(n)) %>% 
+  ggplot(
+    aes(
+      y = reorder(Q5, -n),
+      x = n,
+      fill = Q6
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = position_dodge(width = 1)
+  ) +
+  geom_label(
+    aes(
+      label = n,
+    ),
+    size = 3
+  ) +
+  labs(
+    y = 'Frequência de acesso à loja de aplicativos',
+    x = 'Total'
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 20, vjust = 0.5),
+  ) +
+  facet_grid(rows = 'Q6')
+
+```
+
+#### Definindo função genéricas para contagem e plotagem de dummy vars
+
+```{r}
+arrange_and_plot <- function(df, 
+                             cols, 
+                             named_cols,
+                             desc_col = "reason", 
+                             legend.position = "none",
+                             title = "",
+                             xlabel = "",
+                             ylabel = "",
+                             show.legend = FALSE,
+                             col.width = 0.5,
+                             dodge.width = 0.5,
+                             xaxis.title.size = 13,
+                             xaxis.title.vjust = 0.5,
+                             yaxis.title.size = 13,
+                             yaxis.title.vjust = 0,
+                             xaxis.text.angle = 0,
+                             xaxis.text.vjust = 0,
+                             invert.axis = FALSE,
+                             hide.yaxis.title = FALSE,
+                             hide.xaxis.title = FALSE
+                             ) {
+  rdf <- df %>% 
+    select(cols) %>% 
+    rowwise() %>% 
+    sapply(as.numeric) %>% 
+    as.tibble() %>% 
+    rowwise() %>% 
+    replace(is.na(.), 0) %>% 
+    rowwise() %>% 
+    sapply(sum, simplify = FALSE)  %>% 
+    as.tibble()
+
+  names(rdf) <- named_cols 
+  
+  plot <- rdf %>%
+    gather(
+      desc_col, "total", 1:ncol(.)
+    ) %>% 
+    ggplot(
+      aes(
+        x = if (invert.axis) total else reorder(desc_col, -total),
+        y = if (invert.axis) reorder(desc_col, total) else total,
+        fill = desc_col
+      )
+    ) +
+    geom_col(
+      width = col.width,
+      position = position_dodge(dodge.width)
+    )
+  
+  if (invert.axis) {
+    plot <- plot +
+      geom_label(
+        aes(
+          x = total,
+          label = total,
+        ),
+        show.legend = show.legend
+      )  
+  } else {
+    plot <- plot +
+      geom_label(
+        aes(
+          y = total,
+          label = total,
+        ),
+        show.legend = show.legend
+      )
+  }
+  
+  plot +
+    labs(
+        title = title,
+        x = xlabel,
+        y = ylabel
+    ) +
+    theme_classic() +
+    theme(
+      legend.position = legend.position,
+      axis.title.x = if (!hide.xaxis.title) element_text(size=xaxis.title.size, vjust=xaxis.title.vjust)  else element_blank(),
+      axis.title.y = if (!hide.yaxis.title) element_text(size=yaxis.title.size, vjust=yaxis.title.vjust) else element_blank(),
+      axis.text.x = element_text(angle = xaxis.text.angle, vjust=xaxis.text.vjust)
+    )
+}
+```
+
+
+#### Principais motivos para baixar apps 
+
+```{r, fig.width=9, fig.height=4}
+
+q7_names <-c("Feeling Depressed", "Need to carry out a task", "Feeling bored", "Want to be entertained", "Need to know something", "Other")
+
+q7_cols <- names(df)[(21:26)]
+
+df %>% 
+  arrange_and_plot(
+    q7_cols,
+    q7_names,
+    title = 'Fatores motivadores que levam as pessoas a baixarem apps',
+    xlabel = 'Motivo',
+    ylabel = 'Total',
+    dodge.width = 0.5,
+    col.width = 0.6,
+    xaxis.title.vjust = -0.5
+    )
+```
+
+
+#### Principais formas de encontrar aplicativos
+
+
+```{r, fig.width=6, height = 6}
+q8_cols = names(df)[(27:35)]
+
+q8_names <- c(
+  "Compare several to choose one",
+  "Download the first presented",
+  "Featured apps",
+  "Among top downloads",
+  "Randomly choose one that might interest",
+  "Search using keywords",
+  "Visit websites that review apps",
+  "Use search engines",
+  "Other"
+)
+
+df %>% 
+   arrange_and_plot(
+    q8_cols,
+    q8_names,
+    title = 'Fatores motivadores que levam as pessoas a baixarem apps',
+    xlabel = 'Total',
+    ylabel = 'Motivo',
+    dodge.width = 0.5,
+    col.width = 0.6,
+    invert.axis = TRUE
+    )
+  
+```
+
+#### O que mais consideram para baixar
+
+```{r, fig.height=7, fig.width=10}
+
+q9_cols <- names(df)[(36:48)]
+
+q9_names <- c(
+  "Reviews by other users",
+  "Name of app (e.g., catchy name)",
+  "Number of users who have downloaded the app",
+  "Icon (e.g., if the icon is attractive)",
+  "Description of the app",
+  "Features",
+  "Number of users who have rated the app",
+  "Price",
+  "Star rating",
+  "Size of app",
+  "Screen shots (e.g., see how it looks running)",
+  "Who developed the app",
+  "Other"
+)
+
+
+df %>% 
+  arrange_and_plot(
+    q9_cols,
+    q9_names,
+    "Motivo",
+    title = "Motivos para escolher o aplicativo para baixar",
+    xlabel = "Total",
+    ylabel = "Porque baixa",
+    col.width = 0.7,
+    invert.axis = TRUE,
+    hide.yaxis.title = TRUE,
+    hide.xaxis.title = TRUE
+  )
+```
+
+#### Porque de fato baixam um aplicativo
+
+```{r}
+
+q10_cols <- names(df)[(49:(49+14))]
+
+q10_names <- c(
+  "To interact with friends and/or family.",
+  "To interact with people I don't know.",
+  "To help me carry out a task.",
+  "It is featured in the app store.",	
+  "It is on the top downloads chart.",
+  "It is advertised in the apps that I am using. ",
+  "For entertainment.",
+  "Out of curiosity. ",
+  "An impulsive purchase.", 
+  "It features brands or celebrities that\nI like\n(e.g., Coca-Cola, Michael Jackson). ",
+  "It was mentioned in the media\n(e.g., TV, newspaper, radio, blogs). ",
+  "It is an extension of the \nwebsite that I use (e.g., Facebook app). ",
+  "It is recommended by friends and/or family. ",
+  "For someone else (e.g., children, partner).",
+  "Other"
+)
+
+df %>% 
+  arrange_and_plot(
+    q10_cols,
+    q10_names,
+    "Motivo",
+    title = "Motivos que levam ao download do app",
+    xlabel = "Total",
+    ylabel = "",
+    col.width = 0.6,
+    dodge.width = 1,
+    invert.axis = TRUE,
+    hide.yaxis.title = TRUE,
+    hide.xaxis.title = TRUE
+  )
+```
+
