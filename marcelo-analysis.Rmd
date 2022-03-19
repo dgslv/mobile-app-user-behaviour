@@ -479,3 +479,9 @@ df %>%
   )
 ```
 
+# Segmentação de Darden
+
+```{r}
+
+```
+
