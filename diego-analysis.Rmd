@@ -11,7 +11,6 @@ library(readr)
 library(tidyverse)
 library(tidytext)
 library(stringr)
-
 ```
 
 ## Contexto
@@ -167,7 +166,8 @@ df %>%
   geom_col() +
   labs(
     x = 'Frequencia de abertura da loja de aplicativos',
-    y = 'Total'
+    y = 'Total',
+    fill = "Frequência"
   ) +
   theme(
     axis.text.x = element_text(angle = 45, vjust=.6),
@@ -344,6 +344,21 @@ arrange_and_plot <- function(df,
       axis.text.x = element_text(angle = xaxis.text.angle, vjust=xaxis.text.vjust)
     )
 }
+
+
+join_columns_and_plot <- function(dfp, cols) {
+   dfp %>% 
+    select(cols) %>% 
+    rowwise() %>% 
+    sapply(as.numeric) %>% 
+    as.tibble() %>% 
+    rowwise() %>% 
+    replace(is.na(.), 0) %>% 
+    rowwise() %>% 
+    sapply(sum, simplify = FALSE)  %>% 
+    as.tibble()
+}
+
 ```
 
 
@@ -490,5 +505,339 @@ df %>%
     invert.axis = TRUE
   )
 
+```
+
+
+```{r}
+
+countries = c(
+  "American",
+  "Australian",
+  "Brazilian",
+  "British",
+  "Canadian",
+  "Chinese",
+  "French",
+  "German",
+  "Indian",
+  "Italian",
+  "Japanese",
+  "Mexican",
+  "Russian",
+  "South Korean",
+  "Spanish",
+  "Other",
+  "Not assigned - NA"
+)
+
+country_df <- df %>% 
+  group_by(Q19) %>% 
+  count() %>% 
+  dplyr::mutate(
+    Q19 = as.numeric(Q19)
+  ) %>%
+  dplyr::arrange(Q19) %>% 
+  mutate(
+    Q19 = as.character(Q19)
+  )
+
+
+country_df$Q19 <- countries
+
+
+country_df %>% 
+  ggplot(
+    aes(
+      y = reorder(Q19, n),
+      x = n,
+      fill = Q19
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = position_dodge(10)
+  ) +
+  labs(
+    x = 'Total de pessoas',
+    y = 'País',
+    fill = ''
+  ) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(vjust=0.5, angle = 15)
+  )
+
+```
+```{r}
+df %>% 
+  select(names(df)[c(76:79)]) %>% 
+  drop_na
+```
+
+
+```{r}
+logit_user_feats <- c("Q5", "Q6", "Q16", "Q17", "Q18", "Q19", "Q23", "Q24", "Q26", "Q27")
+
+df_logit <- df %>% 
+  pivot_longer(starts_with("Q11_"), names_to="Potential", values_to="Potential_value") %>% 
+  mutate(
+    Potential = as.factor(as.numeric(str_extract(Potential, "([0-9]+)$"))),
+    Q17 = as.integer(Q17)
+  ) %>% 
+  drop_na("Potential_value") %>% 
+  select(
+    logit_user_feats, starts_with("Q7_"), starts_with("Q8_"), 
+    starts_with("Q9_"), starts_with("Q10_"), starts_with("Q11_"), 
+    starts_with("Q13_"), starts_with("Q14_"), starts_with("Q15_"),
+    Potential
+  ) %>% 
+  mutate_all(
+    funs(replace_na(., 0))
+  ) %>% 
+  mutate_all(
+    funs(as.numeric(.))
+  ) %>% 
+  mutate(
+    Potential = as.factor(Potential)
+  )
+
+```
+
+
+```{r}
+df %>% 
+  drop_na(Q17) %>% 
+  group_by(Q17) %>% 
+  count() %>% 
+  arrange(desc(n))
+```
+
+```{r}
+df_logit %>% 
+  select(Potential) %>% 
+  group_by(Potential) %>% 
+  count() %>% 
+  arrange(n)
+  
+```
+### Logit
+
+#### Treinando o modelo
+
+```{r}
+
+set.seed(123)
+
+splits <- rsample::initial_split(df_logit)
+train <- rsample::training(splits)
+test <- rsample::testing(splits)
+ 
+logit_fit <- nnet::multinom(Potential ~ ., family = "binomial", data = train, MaxNWts=10000)
+
+```
+
+
+#### Avaliando o modelo
+
+```{r}
+
+ytest <- test %>% 
+  select(Potential)
+
+ypred <- predict(logit_fit, test %>% 
+                   select(-Potential))
+
+MLmetrics::Accuracy(ypred, ytest$Potential)
+```
+
+Se fossemos chutar uma classe dentre as 12 possíveis, teríamos `1/12` em média de acertos. Isso é menor que a acurácia obtida, então no geral nosso modelo conseguiu aprender um pouco sobre os diferentes perfis.
+
+
+```{r}
+pROC::roc(response = ytest$Potential, predictor=as.numeric(ypred)) %>% 
+  plot
+```
+
+### Clustering
+
+```{r}
+
+df_km <- df_logit %>% 
+  select(-Potential)
+
+```
+
+
+```{r}
+adjust_kmeans <- function(k) {
+  k_fit <- df_km %>% 
+    kmeans(k, iter.max = 30)
+  
+  w <- k_fit$tot.withinss
+  tibble(k = k, w = w)
+}
+
+k_adjust <- map_dfr(2:10, adjust_kmeans)
+```
+
+```{r}
+k_adjust %>% 
+  ggplot(
+    aes(
+      x = k, 
+      y = w
+    )
+  ) + 
+  geom_line() +
+  geom_point(colour = "red", size = 3) +
+  theme_minimal(12)
+```
+
+Iremos separar em 5 grupos...
+
+```{r}
+
+k_adj <- df_km %>% 
+  kmeans(5, iter.max = 30)
+
+```
+
+```{r}
+df_km$cluster = k_adj$cluster
+```
+
+```{r}
+df_km <- df_km %>% 
+  mutate(
+    cluster = as.factor(cluster)
+  )
+```
+
+#### Analisando grupos
+
+##### Frequencia de uso
+
+```{r}
+
+df_km %>% 
+  select(Q5, cluster) %>% 
+  drop_na() %>% 
+  mutate(
+    Q5 = q5_answers[Q5,]
+  ) %>% 
+  group_by(Q5, cluster) %>% 
+    count() %>% 
+  arrange(desc(n)) %>% 
+  ggplot(
+    aes(
+      x = reorder(Q5, -n),
+      y = n,
+      fill = cluster
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    y = 'Frequência de acesso à loja de aplicativos',
+    x = 'Total'
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 20, vjust = 0.5),
+  )
+```
+
+Conseguimos ver que 2 grupos parecem acessar mais a loja do que os demais... 
+
+Visualizaremos a correlação:
+
+```{r}
+cor(df_km$Q5, df_km$cluster)
+```
+
+Quanto maior o uso, menor o cluster... é o que conseguimos ver também em nosso gráfico.
+
+Prosseguiremos...
+
+```{r}
+make_count_from_question <- function (df, col, names_to = "column", values_to = "column_value") {
+  df %>% 
+    select(starts_with(col), cluster) %>% 
+    pivot_longer(cols = starts_with(col), names_to = names_to, values_to = values_to)
+}
+
+regex_only_numbers = '([0-9])$'
+```
+
+
+#### O que motiva as pessoas de cada um dos grupos a procurar por aplicativo?
+
+```{r}
+df_km %>% 
+  select(starts_with("Q7_"), cluster) %>% 
+  pivot_longer(cols = starts_with("Q7_"), names_to = "motivo", values_to = "valor_motivo") %>% 
+  mutate(
+    motivo_n = str_extract(motivo, '([0-9])$')
+  ) %>% 
+  filter(valor_motivo == 1) %>%
+  group_by(cluster, motivo) %>% 
+  count() %>% 
+  ungroup() %>% 
+  ggplot(
+    aes(
+      x = motivo,
+      y = n,
+      fill = cluster,
+      label = n
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = "fill"
+  ) +
+  scale_x_discrete(
+    labels = q7_names
+  )  +
+  labs(
+    x = 'Motivo',
+    y = 'Porcentagem'
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 20, vjust = 0.5),
+  ) 
+
+```
+Os grupos parecem ter uma distribuição homogenea no que diz respeito as razões por baixas aplicativo. 
+
+#### O que as pessoas dos grupos consideram para baixar um aplicativo?
+
+```{r}
+
+select(df_km, starts_with("Q7_"), cluster) %>% 
+  make_count_from_question("Q7_", "motivo", "valor_motivo") %>% 
+  mutate(
+    motivo = str_extract(motivo, regex_only_numbers)
+  ) %>% 
+  filter(valor_motivo == 1) %>% 
+  group_by(cluster, motivo) %>% 
+  count() %>%
+  ggplot(
+    aes(
+      x = motivo,
+      y = n,
+      fill = cluster
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = "fill"
+  ) +
+  scale_x_discrete(
+    labels = q9_names
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 10, vjust = .6)
+  )
 ```
 
