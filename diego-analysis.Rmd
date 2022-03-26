@@ -11,7 +11,6 @@ library(readr)
 library(tidyverse)
 library(tidytext)
 library(stringr)
-
 ```
 
 ## Contexto
@@ -167,7 +166,8 @@ df %>%
   geom_col() +
   labs(
     x = 'Frequencia de abertura da loja de aplicativos',
-    y = 'Total'
+    y = 'Total',
+    fill = "Frequência de acesso a loja"
   ) +
   theme(
     axis.text.x = element_text(angle = 45, vjust=.6),
@@ -197,20 +197,19 @@ df %>%
       x = reorder(Q6_TEXT, -n),
       y = n,
       fill = Q6_TEXT
-    )
+    ),
   ) +
   geom_col() +
-  labs(
-    x = 'Quantidade de aplicativos baixados por mês',
-    y = 'Total',
-  ) +
   theme_classic() +
   labs(
-    fill = 'Frequência'
+    title = "Frequência de aplicativos baixados por mês",
+    x = '',
+    y = 'Total',
+    fill = ""
   ) +
   theme(
     axis.text.x = element_text(vjust = -1),
-    axis.title.x = element_text(vjust = -1),
+    legend.position = "none"
   )
 
 ```
@@ -248,7 +247,8 @@ df %>%
   ) +
   labs(
     y = 'Frequência de acesso à loja de aplicativos',
-    x = 'Total'
+    x = 'Total',
+    fill = 'Grupo de frequência'
   ) +
   theme(
     axis.text.x = element_text(angle = 20, vjust = 0.5),
@@ -372,7 +372,7 @@ df %>%
 #### Principais formas de encontrar aplicativos
 
 
-```{r, fig.width=6, height = 6}
+```{r, fig.width=8, height = 6}
 q8_cols = names(df)[(27:35)]
 
 q8_names <- c(
@@ -441,7 +441,7 @@ df %>%
 
 #### Porque de fato baixam um aplicativo
 
-```{r}
+```{r, fig.width=10}
 
 q10_cols <- names(df)[(49:(49+14))]
 
@@ -480,20 +480,7 @@ df %>%
 ```
 
 
-```{r}
-q9_cols <- names(df)[(64:(63+12))]
-
-df %>% 
-  arrange_and_plot(
-    q9_cols,
-    q9_cols,
-    invert.axis = TRUE
-  )
-
-```
-
-
-```{r}
+```{r, fig.width=8}
 
 countries = c(
   "American",
@@ -535,28 +522,26 @@ country_df %>%
     aes(
       y = reorder(Q19, n),
       x = n,
-      fill = Q19
+      fill = Q19,
+      label = n
     )
   ) +
   geom_bar(
     stat = "identity",
     position = position_dodge(10)
   ) +
+  geom_label() +
   labs(
     x = 'Total de pessoas',
     y = 'País',
-    fill = ''
+    fill = '',
+    title = "Total de pessoas de cada uma das nacionalidades presentes na pesquisa"
   ) +
   theme(
     legend.position = "none",
     axis.text.x = element_text(vjust=0.5, angle = 15)
   )
 
-```
-```{r}
-df %>% 
-  select(names(df)[c(76:79)]) %>% 
-  drop_na
 ```
 
 
