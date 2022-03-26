@@ -730,5 +730,89 @@ range <- map(percentil, ~partial(quantile, probs = .x, na.rm = TRUE)) %>%
 ```
 
 
+#### Analisando grupos
 
+##### Frequencia de uso
+
+```{r}
+
+df_cluster %>% 
+  select(Q5, cluster_hierarquico) %>% 
+  drop_na() %>% 
+  mutate(
+    Q5 = q5_answers[Q5,]
+  ) %>% 
+  group_by(Q5, cluster_hierarquico) %>% 
+    count() %>% 
+  arrange(desc(n)) %>% 
+  ggplot(
+    aes(
+      x = reorder(Q5, -n),
+      y = n,
+      fill = factor(cluster_hierarquico)
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    y = 'Frequência de acesso à loja de aplicativos',
+    x = 'Total'
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 20, vjust = 0.5),
+  )
+```
+
+Conseguimos ver que 2 grupos parecem acessar mais a loja do que os demais... 
+
+Visualizaremos a correlação:
+
+```{r}
+cor(df_cluster$Q5, df_cluster$cluster_hierarquico)
+```
+
+Quanto maior o uso, menor o cluster... é o que conseguimos ver também em nosso gráfico.
+
+Prosseguiremos...
+
+
+#### O que motiva as pessoas de cada um dos grupos a procurar por aplicativo?
+
+```{r}
+df_cluster %>% 
+  select(starts_with("Q7_"), cluster_hierarquico) %>% 
+  pivot_longer(cols = starts_with("Q7_"), names_to = "motivo", values_to = "valor_motivo") %>% 
+  mutate(
+    motivo_n = str_extract(motivo, '([0-9])$')
+  ) %>% 
+  filter(valor_motivo == 1) %>%
+  group_by(cluster_hierarquico, motivo) %>% 
+  count() %>% 
+  ungroup() %>% 
+  ggplot(
+    aes(
+      x = motivo,
+      y = n,
+      fill = factor(cluster_hierarquico),
+      label = n
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = "fill"
+  ) +
+  scale_x_discrete(
+    labels = q7_names
+  )  +
+  labs(
+    x = 'Motivo',
+    y = 'Porcentagem'
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 20, vjust = 0.5),
+  ) 
+
+```
 
