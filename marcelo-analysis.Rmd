@@ -16,7 +16,7 @@ library(stringr)
 
 ## Contexto
 
-Teste2 subir a mudança desse arquivo
+Teste
 
 ## Análise
 
@@ -148,30 +148,6 @@ q5_answers <- data.frame(
   val = c("Never", "Less than once a month ", "Once a month", "More than once a month", "Once a week", "More than once a week", "Once a day", "Several times a day", "Other")
 )
 
-df %>% 
-  select(Q5) %>% 
-  drop_na() %>% 
-  mutate(
-    Q5_TEXT = qr_answers[Q5, ]
-  ) %>% 
-  group_by(Q5_TEXT) %>% 
-  count() %>% 
-  arrange(desc(n)) %>% 
-  ggplot(
-    aes(
-      x = reorder(Q5_TEXT, -n),
-      y = n,
-      fill = Q5_TEXT
-    )
-  ) +
-  geom_col() +
-  labs(
-    x = 'Frequencia de abertura da loja de aplicativos',
-    y = 'Total'
-  ) +
-  theme(
-    axis.text.x = element_text(angle = 45, vjust=.6),
-  )
   
 ```
 
@@ -479,20 +455,464 @@ df %>%
   )
 ```
 
-# Modelo CLuster não Hierarquico
-
-Passos: 
-
-- Histogramas das principais variáveis do modelo
-
-- Selecionar as variáveis que serão usadas para o modelo, explicar o motivo:
-    1. Variável que varia mto pouco
-    2. Variável pouco correlacionada
-    3. Como estou usando distância euclidiana, cuidado com escalas
-
-- Preparar base para rodar os modelos: Tirar NAs
 
 ```{r}
-skimr::skim(df)
+q9_cols <- names(df)[(64:(63+12))]
+
+df %>% 
+  arrange_and_plot(
+    q9_cols,
+    q9_cols,
+    invert.axis = TRUE
+  )
+
 ```
+
+
+```{r}
+
+countries = c(
+  "American",
+  "Australian",
+  "Brazilian",
+  "British",
+  "Canadian",
+  "Chinese",
+  "French",
+  "German",
+  "Indian",
+  "Italian",
+  "Japanese",
+  "Mexican",
+  "Russian",
+  "South Korean",
+  "Spanish",
+  "Other",
+  "Not assigned - NA"
+)
+
+country_df <- df %>% 
+  group_by(Q19) %>% 
+  count() %>% 
+  dplyr::mutate(
+    Q19 = as.numeric(Q19)
+  ) %>%
+  dplyr::arrange(Q19) %>% 
+  mutate(
+    Q19 = as.character(Q19)
+  )
+
+
+country_df$Q19 <- countries
+
+
+country_df %>% 
+  ggplot(
+    aes(
+      y = reorder(Q19, n),
+      x = n,
+      fill = Q19
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = position_dodge(10)
+  ) +
+  labs(
+    x = 'Total de pessoas',
+    y = 'País',
+    fill = ''
+  ) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(vjust=0.5, angle = 15)
+  )
+
+```
+```{r}
+df %>% 
+  select(names(df)[c(76:79)]) %>% 
+  drop_na
+```
+
+
+```{r}
+logit_user_feats <- c("Q5")
+
+df_logit <- df %>% 
+  pivot_longer(starts_with("Q11_"), names_to="Potential", values_to="Potential_value") %>% 
+  mutate(
+    Potential = ifelse(
+      as.numeric(str_extract(Potential, "([0-9]+)$")) %in% c(1, 10, 2, 6),
+      FALSE,
+      TRUE
+    ),
+    Q17 = as.integer(Q17)
+  ) %>% 
+  drop_na("Potential_value") %>% 
+  select(
+    logit_user_feats, starts_with("Q7_"), starts_with("Q8_"), 
+    starts_with("Q9_"), 
+    Potential
+  ) %>% 
+  mutate_all(
+    funs(as.numeric(.))
+  ) %>% 
+  mutate_all(
+    funs(replace_na(., 0))
+  ) %>% 
+  mutate(
+    Potential = as.factor(Potential)
+  ) %>% 
+  select(-Q8_7, -Q9_5, -Q9_11, -Q9_2, -Q8_4)
+
+interest_vars <- (cor(df_logit %>% 
+      mutate(
+        Potential = as.numeric(Potential)
+      )) %>% 
+  as.data.frame() %>% 
+  select(Potential) %>% 
+  filter(Potential > 0.13 | Potential < -0.3) %>%
+  rownames)
+
+df_logit <- df_logit %>% 
+  select(interest_vars)
+
+df_logit %>% 
+  group_by(Potential) %>% 
+  count()
+
+```
+
+### Logit
+
+#### Treinando e avaliando o modelo
+
+```{r}
+set.seed(123)
+
+splits <- rsample::initial_split(df_logit)
+train <- rsample::training(splits)
+test <- rsample::testing(splits)
+ 
+logit_fit <- nnet::multinom(Potential ~ ., family = "binomial", data = train)
+
+ytest <- test %>% 
+  select(Potential)
+
+ypred <- predict(logit_fit, test %>% 
+                   select(-Potential))
+
+MLmetrics::Accuracy(ypred, ytest$Potential)
+
+MLmetrics::Accuracy(ypred, ytest$Potential) / 7387
+
+MLmetrics::Precision(ypred, ytest$Potential)
+```
+
+
+Se fossemos chutar uma classe dentre as 12 possíveis, teríamos `1/12` em média de acertos. Isso é menor que a acurácia obtida, então no geral nosso modelo conseguiu aprender um pouco sobre os diferentes perfis.
+
+
+```{r}
+pROC::roc(response = ytest$Potential, predictor=as.numeric(ypred)) %>% 
+  plot
+```
+### Clustering Hierarquico
+
+#### Preparar para a segmentação
+
+Antes de rodar o modelo hierarquico precisamos tirar valores nulos, padronizar os valores
+
+```{r ,warning=FALSE}
+
+library(gridExtra)
+library(Hmisc)
+library(PerformanceAnalytics)
+
+df_cluster <- df_logit %>% 
+  select(-Potential) %>% 
+  drop_na()%>%
+  mutate(across(everything(), scale,  .names = "{col}z"))
+
+
+```
+#### Correlação dos dados
+
+Nesta etapa analisamos se os dados tratados tem correlação entre si:
+
+```{r}
+df_cluster %>% select(ends_with("z")) %>% 
+  PerformanceAnalytics::chart.Correlation()
+
+varcritcor = df_cluster %>% select(ends_with("z")) %>% as.matrix() %>% Hmisc::rcorr()
+(varcritcor$r)
+(varcritcor$P)
+```
+
+A partir desses resultados, não vemos necessidade de retirar mais variáveis do modelo pois nenhuma variavél apresenta correlação acima de 40% com outra variavél do modelo
+
+#### SEGMENTACAO: WARDSLINKAGE & DENDROGRAMA
+
+##### Calcular distancias euclidianas e wardslinkage 
+
+Para isso vamos ver o dedograma dos nossos dados
+
+```{r}
+
+euclid <- df_cluster %>% 
+  select(ends_with("z")) %>% dist("euclidean")
+
+ward <- euclid %>% hclust(method="ward.D2") 
+
+wardg1 <- plot(ward, labels = NULL, hang = -1, cex = 0.6,
+     main = "Cluster Dendrograma", sub = NULL,
+     xlab = NULL, ylab = "Dissimilaridade")
+```
+Olhando este resultado, vemos que é razoável separar em 5 clusters de forma à garantir disferenciação significativa entre os grupos e também limitamos nesse número para facilitar sua intepretação.
+
+Nossos cluster tem os seguintes números de usuários:
+
+```{r}
+
+ward3 <- cutree(ward, k=5)
+table(ward3) 
+
+```
+```{r}
+
+df_cluster[ , "cluster_hierarquico"] <- ward3
+
+```
+
+E assim conseguimos visualizar o cluster
+
+```{r}
+
+factoextra::fviz_cluster(list(data = df_cluster %>% select(!ends_with('z')), cluster = ward3))
+
+```
+
+#### Descrevendo o Perfil do cluster Hierarquico
+
+```{r}
+(clus3media <- df_cluster %>%
+  select(!ends_with('z')) %>% 
+  group_by(cluster_hierarquico) %>%
+  summarise_at(.vars = interest_vars[interest_vars != "Potential"] ,
+              .funs = mean))
+```
+
+```{r}
+
+percentil <- c(0.2, 0.8)
+
+percrotulo <- map_chr(percentil, ~paste0(.x*100, "%"))
+
+range <- map(percentil, ~partial(quantile, probs = .x, na.rm = TRUE)) %>% 
+  set_names(nm = percrotulo )
+
+(varclusrange <- df_cluster %>%
+  select(!ends_with("z")) %>% 
+  group_by(cluster_hierarquico) %>% 
+  summarize_at(vars(interest_vars[interest_vars != "Potential"]), funs(!!!range)))
+
+```
+
+
+### Clustering Não Hierarquico
+
+```{r}
+
+df_km <- df_logit %>% 
+  select(-Potential)
+
+```
+
+
+```{r}
+adjust_kmeans <- function(k) {
+  k_fit <- df_km %>% 
+    kmeans(k, iter.max = 30)
+  
+  w <- k_fit$tot.withinss
+  tibble(k = k, w = w)
+}
+
+k_adjust <- map_dfr(2:10, adjust_kmeans)
+```
+
+```{r}
+k_adjust %>% 
+  ggplot(
+    aes(
+      x = k, 
+      y = w
+    )
+  ) + 
+  geom_line() +
+  geom_point(colour = "red", size = 3) +
+  theme_minimal(12)
+```
+
+Iremos separar em 5 grupos...
+
+```{r}
+
+k_adj <- df_km %>% 
+  kmeans(5, iter.max = 30)
+
+```
+
+```{r}
+df_km$cluster = k_adj$cluster
+```
+
+
+```{r}
+df_km <- df_km %>% 
+  mutate(
+    cluster = as.factor(cluster)
+  )
+```
+
+#### Analisando grupos
+
+##### Frequencia de uso
+
+```{r}
+
+df_km %>% 
+  select(Q5, cluster) %>% 
+  drop_na() %>% 
+  mutate(
+    Q5 = q5_answers[Q5,]
+  ) %>% 
+  group_by(Q5, cluster) %>% 
+    count() %>% 
+  arrange(desc(n)) %>% 
+  ggplot(
+    aes(
+      x = reorder(Q5, -n),
+      y = n,
+      fill = cluster
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    y = 'Frequência de acesso à loja de aplicativos',
+    x = 'Total'
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 20, vjust = 0.5),
+  )
+```
+
+Conseguimos ver que 2 grupos parecem acessar mais a loja do que os demais... 
+
+Visualizaremos a correlação:
+
+```{r}
+cor(df_km$Q5, df_km$cluster)
+```
+
+Quanto maior o uso, menor o cluster... é o que conseguimos ver também em nosso gráfico.
+
+Prosseguiremos...
+
+```{r}
+make_count_from_question <- function (df, col, names_to = "column", values_to = "column_value") {
+  df %>% 
+    select(starts_with(col), cluster) %>% 
+    pivot_longer(cols = starts_with(col), names_to = names_to, values_to = values_to)
+}
+
+regex_only_numbers = '([0-9])$'
+```
+
+
+#### O que motiva as pessoas de cada um dos grupos a procurar por aplicativo?
+
+```{r}
+df_km %>% 
+  select(starts_with("Q7_"), cluster) %>% 
+  pivot_longer(cols = starts_with("Q7_"), names_to = "motivo", values_to = "valor_motivo") %>% 
+  mutate(
+    motivo_n = str_extract(motivo, '([0-9])$')
+  ) %>% 
+  filter(valor_motivo == 1) %>%
+  group_by(cluster, motivo) %>% 
+  count() %>% 
+  ungroup() %>% 
+  ggplot(
+    aes(
+      x = motivo,
+      y = n,
+      fill = cluster,
+      label = n
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = "fill"
+  ) +
+  scale_x_discrete(
+    labels = q7_names
+  )  +
+  labs(
+    x = 'Motivo',
+    y = 'Porcentagem'
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 20, vjust = 0.5),
+  ) 
+
+```
+Os grupos parecem ter uma distribuição homogenea no que diz respeito as razões por baixas aplicativo. 
+
+#### O que as pessoas dos grupos consideram para baixar um aplicativo?
+
+```{r}
+
+select(df_km, starts_with("Q7_"), cluster) %>% 
+  make_count_from_question("Q7_", "motivo", "valor_motivo") %>% 
+  mutate(
+    motivo = str_extract(motivo, regex_only_numbers)
+  ) %>% 
+  filter(valor_motivo == 1) %>% 
+  group_by(cluster, motivo) %>% 
+  count() %>%
+  ggplot(
+    aes(
+      x = motivo,
+      y = n,
+      fill = cluster
+    )
+  ) +
+  geom_bar(
+    stat = "identity",
+    position = "fill"
+  ) +
+  scale_x_discrete(
+    labels = q9_names
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 10, vjust = .6)
+  )
+```
+
+
+```{r}
+
+df_logit %>% 
+  mutate(
+    didnt_paied = ifelse(as.numeric(Potential) %in% c(1), FALSE, TRUE)
+  ) %>% 
+  group_by(didnt_paied) %>% 
+  count()
+```
+
 
