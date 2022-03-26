@@ -561,19 +561,22 @@ df %>%
 
 
 ```{r}
-logit_user_feats <- c("Q5", "Q6", "Q16", "Q17", "Q18", "Q19", "Q23", "Q24", "Q26", "Q27")
+logit_user_feats <- c("Q5")
 
 df_logit <- df %>% 
   pivot_longer(starts_with("Q11_"), names_to="Potential", values_to="Potential_value") %>% 
   mutate(
-    Potential = as.factor(as.numeric(str_extract(Potential, "([0-9]+)$"))),
+    Potential = ifelse(
+      as.numeric(str_extract(Potential, "([0-9]+)$")) %in% c(1, 10, 2, 6),
+      FALSE,
+      TRUE
+    ),
     Q17 = as.integer(Q17)
   ) %>% 
   drop_na("Potential_value") %>% 
   select(
     logit_user_feats, starts_with("Q7_"), starts_with("Q8_"), 
-    starts_with("Q9_"), starts_with("Q10_"), starts_with("Q11_"), 
-    starts_with("Q13_"), starts_with("Q14_"), starts_with("Q15_"),
+    starts_with("Q9_"), 
     Potential
   ) %>% 
   mutate_all(
@@ -584,47 +587,39 @@ df_logit <- df %>%
   ) %>% 
   mutate(
     Potential = as.factor(Potential)
-  )
+  ) %>% 
+  select(-Q8_7, -Q9_5, -Q9_11, -Q9_2, -Q8_4)
 
-```
-
-
-```{r}
-df %>% 
-  drop_na(Q17) %>% 
-  group_by(Q17) %>% 
-  count() %>% 
-  arrange(desc(n))
-```
-
-```{r}
-df_logit %>% 
+interest_vars <- (cor(df_logit %>% 
+      mutate(
+        Potential = as.numeric(Potential)
+      )) %>% 
+  as.data.frame() %>% 
   select(Potential) %>% 
+  filter(Potential > 0.13 | Potential < -0.3) %>%
+  rownames)
+
+df_logit <- df_logit %>% 
+  select(interest_vars)
+
+df_logit %>% 
   group_by(Potential) %>% 
-  count() %>% 
-  arrange(n)
-  
+  count()
+
 ```
+
 ### Logit
 
-#### Treinando o modelo
+#### Treinando e avaliando o modelo
 
 ```{r}
-
 set.seed(123)
 
 splits <- rsample::initial_split(df_logit)
 train <- rsample::training(splits)
 test <- rsample::testing(splits)
  
-logit_fit <- nnet::multinom(Potential ~ ., family = "binomial", data = train, MaxNWts=10000)
-
-```
-
-
-#### Avaliando o modelo
-
-```{r}
+logit_fit <- nnet::multinom(Potential ~ ., family = "binomial", data = train)
 
 ytest <- test %>% 
   select(Potential)
@@ -633,7 +628,12 @@ ypred <- predict(logit_fit, test %>%
                    select(-Potential))
 
 MLmetrics::Accuracy(ypred, ytest$Potential)
+
+MLmetrics::Accuracy(ypred, ytest$Potential) / 7387
+
+MLmetrics::Precision(ypred, ytest$Potential)
 ```
+
 
 Se fossemos chutar uma classe dentre as 12 possíveis, teríamos `1/12` em média de acertos. Isso é menor que a acurácia obtida, então no geral nosso modelo conseguiu aprender um pouco sobre os diferentes perfis.
 
@@ -825,4 +825,16 @@ select(df_km, starts_with("Q7_"), cluster) %>%
     axis.text.x = element_text(angle = 10, vjust = .6)
   )
 ```
+
+
+```{r}
+
+df_logit %>% 
+  mutate(
+    didnt_paied = ifelse(as.numeric(Potential) %in% c(1), FALSE, TRUE)
+  ) %>% 
+  group_by(didnt_paied) %>% 
+  count()
+```
+
 
